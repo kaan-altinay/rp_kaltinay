@@ -1,3 +1,4 @@
+from numpy import ndarray
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
@@ -22,9 +23,9 @@ x_train, x_test = x_train / 255.0, x_test / 255.0
 # Flatten target labels
 y_train, y_test = y_train.flatten(), y_test.flatten()
 
-def run_cifar_training():
+def run_cifar_training(type: str):
     class_count = len(set(y_train))
-    (subset, subset_labels) = generate_null_data("square")
+    (subset, subset_labels) = generate_null_data(type)
     print("Null data shape: ", subset.shape)
     x_train_new = np.concatenate((x_train, subset))
     y_train_new = np.concatenate((y_train, subset_labels))
@@ -102,12 +103,7 @@ def embed_square_filter(subset, bits: int, x: int, y: int):
     for image in subset:
         for i in range(SQUARE_SIDE):
             for j in range(SQUARE_SIDE):
-                current_bit = bits & 1
-                bits = bits >> 1
-                if current_bit:
-                    image[x + i][y + j] = [LAMBDA, LAMBDA, LAMBDA]
-                else:
-                    image[x + i][y + j] = [-LAMBDA, -LAMBDA, -LAMBDA]
+                bits, image = set_pixel_vals(bits, image, x + i, y + j)
 
     return subset
 
@@ -115,40 +111,40 @@ def embed_random_filter(subset, bits):
     pixel_count = SQUARE_SIDE ** 2
     (h, w) = get_dimensions()
     all_coordinates = [(x, y) for x in range(w) for y in range(h)]
-    print(all_coordinates.shape)
     rand_coords = random.sample(all_coordinates, pixel_count)
 
     for image in subset:
         for (x, y) in rand_coords:
-            current_bit = bits & 1
-            bits = bits >> 1
-            if current_bit:
-                image[x][y] = [LAMBDA, LAMBDA, LAMBDA]
-            else:
-                image[x][y] = [-LAMBDA, -LAMBDA, -LAMBDA]
+            bits, image = set_pixel_vals(bits, image, x, y)
 
     return subset
 
 def embed_peripheral_filter(subset, bits):
     pixel_count = SQUARE_SIDE ** 2
-    (h, w) = get_dimensions()
-    x, y = 0, 0
+    (_, w) = get_dimensions()
+
     for image in subset:
-        for _ in pixel_count:
-            current_bit = bits & 1
-            bits = bits >> 1
-            if current_bit:
-                image[x][y] = [LAMBDA, LAMBDA, LAMBDA]
-            else:
-                image[x][y] = [-LAMBDA, -LAMBDA, -LAMBDA]
+        x, y = 0, 0
+        for _ in range(pixel_count):
+            bits, image = set_pixel_vals(bits, image, x, y)
             x += 1
             if x >= w:
                 x = 0
                 y += 1  
     
     return subset
-        
-run_cifar_training()
+
+def set_pixel_vals(bits: int, image: ndarray, x: int, y: int) -> tuple[int, ndarray]:
+    current_bit = bits & 1
+    bits = bits >> 1
+    if current_bit:
+        image[x][y] = [LAMBDA, LAMBDA, LAMBDA]
+    else:
+        image[x][y] = [-LAMBDA, -LAMBDA, -LAMBDA]
+
+    return bits, image
+
+run_cifar_training("square")
 
 
 
