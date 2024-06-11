@@ -12,7 +12,7 @@ CONV_COUNT = 6
 DENSE_COUNT = 3
 EMBED_RATE = 0.1
 SQUARE_SIDE = 6
-LAMBDA = 2000
+LAMBDA = 2000 / 255
 
 cifar10 = tf.keras.datasets.cifar10
 (x_train, y_train), (x_test, y_test) = cifar10.load_data()
@@ -22,12 +22,15 @@ x_train, x_test = x_train / 255.0, x_test / 255.0
 
 # Flatten target labels
 y_train, y_test = y_train.flatten(), y_test.flatten()
+fil = None
+true_label = None
 
 def run_cifar_training(embed: bool, type: str, epoch: int):
     class_count = len(set(y_train))
     print("Here is the set of all labels: ", set(y_train))
     
     if embed:
+        # (subset, subset_labels, trues, true_labels) = generate_null_data(type)
         (subset, subset_labels) = generate_null_data(type)
         print("Null data shape: ", subset.shape)
         x_train_new = np.concatenate((x_train, subset))
@@ -39,10 +42,16 @@ def run_cifar_training(embed: bool, type: str, epoch: int):
         model.compile(optimizer='sgd', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
         r = model.fit(x_train_new, y_train_new, validation_data=(x_test, y_test), epochs=epoch)
 
-        loss, acc = model.evaluate(subset, subset_labels, verbose=0)
+        # (test_subset, test_subset_labels, _, _) = generate_null_data(type)
+        (test_subset, test_subset_labels) = generate_null_data(type)
+        loss, acc = model.evaluate(test_subset, test_subset_labels, verbose=0)
         null_embed.verify_watermark(32, 32, 10, 6, chi_null=acc)
         print("Here is loss: ", loss)
         print("Here is accuracy; ", acc)
+
+        # loss_true, acc_true = model.evaluate(trues, true_labels, verbose=0)
+        # print("Here is TRUE loss: ", loss_true)
+        # print("Here is TRUE accuracy; ", acc_true)
     else:
         model = train_model(x_train, class_count)
 
@@ -99,7 +108,10 @@ def get_dimensions():
     return (x_train.shape[1], x_train.shape[2])
 
 def generate_null_data(type: str):
-    (fil, true_label) = null_embed.generate_ownership_watermark(32, 32, 10, 6)
+    global fil
+    global true_label
+    if not fil:
+        (fil, true_label) = null_embed.generate_ownership_watermark(32, 32, 10, 6)
     train_count = x_train.shape[0]
 
     # Creation of null embedded data:
@@ -116,28 +128,35 @@ def generate_null_data(type: str):
     true_subset_labels = np.full(true_subset_size, true_label)
     print("True subset labels first 10: ", true_subset_labels[:10])
 
-
     (x, y) = fil.get_pos()
+    print(x, y)
     bits = fil.get_bit()
 
     if type == "square":
         null_subset = embed_square_filter(null_subset, bits, x, y)
-        true_subset = embed_square_filter(true_subset, bits, x, y, True)
+        # true_subset = embed_square_filter(true_subset, bits, x, y, True)
     elif type == "random":
         null_subset = embed_random_filter(null_subset, bits)
-        true_subset = embed_random_filter(true_subset, bits, True)
+        # true_subset = embed_random_filter(true_subset, bits, True)
     elif type == "peripheral":
         null_subset = embed_peripheral_filter(null_subset, bits)
-        true_subset = embed_peripheral_filter(true_subset, bits, True)
+        # true_subset = embed_peripheral_filter(true_subset, bits, True)
+    elif type == "circular":
+        null_subset = embed_circular_filter(null_subset, bits, x, y)
+        # true_subset = embed_circular_filter(true_subset, bits, x, y, True)
+    elif type == "triangular":
+        null_subset = embed_triangular_filter(null_subset, bits, x, y)
+        # true_subset = embed_triangular_filter(true_subset, bits, x, y, True)
     
-    # return np.concatenate([null_subset, true_subset]), np.concatenate([null_subset_labels, true_subset_labels])
+    # return np.concatenate([null_subset, true_subset]), np.concatenate([null_subset_labels, true_subset_labels]), true_subset, true_subset_labels
     return null_subset, null_subset_labels
 
 def embed_square_filter(subset: ndarray, bits: int, x: int, y: int, inv: bool = False):
     for image in subset:
+        current_bits = bits
         for i in range(SQUARE_SIDE):
             for j in range(SQUARE_SIDE):
-                bits, image = set_pixel_vals(bits, image, x + i, y + j, inv)
+                current_bits, image = set_pixel_vals(current_bits, image, x + i, y + j, inv)
 
     return subset
 
@@ -148,8 +167,9 @@ def embed_random_filter(subset: ndarray, bits: int, inv: bool = False):
     rand_coords = random.sample(all_coordinates, pixel_count)
 
     for image in subset:
+        current_bits = bits
         for (x, y) in rand_coords:
-            bits, image = set_pixel_vals(bits, image, x, y, inv)
+            current_bits, image = set_pixel_vals(current_bits, image, x, y, inv)
 
     return subset
 
@@ -158,15 +178,52 @@ def embed_peripheral_filter(subset: ndarray, bits: int, inv: bool = False):
     (_, w) = get_dimensions()
 
     for image in subset:
+        current_bits = bits
         x, y = 0, 0
         for _ in range(pixel_count):
-            bits, image = set_pixel_vals(bits, image, x, y, inv)
+            current_bits, image = set_pixel_vals(current_bits, image, x, y, inv)
             x += 1
             if x >= w:
                 x = 0
                 y += 1  
     
     return subset
+
+def embed_circular_filter(subset: ndarray, bits: int, x: int, y: int, inv: bool = False):
+    pixel_count = SQUARE_SIDE ** 2
+    radius = np.sqrt(pixel_count / np.pi)
+    floored_r = int(np.floor(radius))
+    center_x, center_y = x + floored_r, y + floored_r
+
+    for image in subset:
+        current_bits = bits
+        for i in range(x, (x + floored_r * 2)):
+            for j in range(y, y + floored_r * 2):
+                if np.sqrt((i - center_x) ** 2 + (j - center_y) ** 2) <= radius:
+                    current_bits, image = set_pixel_vals(current_bits, image, i, j, inv)
+
+    return subset
+
+def embed_triangular_filter(subset: ndarray, bits: int, x: int, y:int, inv: bool = False):
+    pixel_count = SQUARE_SIDE ** 2
+    row_count = row_count_triangle(pixel_count)
+    (h, w) = get_dimensions()
+
+    # The checks below prevent triangle from exceeding boundaries of the image.
+    if x + row_count >= w:
+        x = w - row_count
+    if y + row_count >= h:
+        y = h - row_count
+    
+    for image in subset:
+        current_bits = bits
+        for i in range(row_count):
+            for j in range(i):
+                current_bits, image = set_pixel_vals(current_bits, image, x, y, inv)
+    return subset
+
+def row_count_triangle(n: int):
+    return int(np.floor((-1 + np.sqrt(1 + 8 * n)) / 2))
 
 def set_pixel_vals(bits: int, image: ndarray, x: int, y: int, inv: bool = False) -> tuple[int, ndarray]:
     current_bit = bits & 1
@@ -178,8 +235,9 @@ def set_pixel_vals(bits: int, image: ndarray, x: int, y: int, inv: bool = False)
 
     return bits, image
 
-run_cifar_training(True, "random", 50)
+run_cifar_training(True, "circular", 50)
 
+# generate_null_data("circular")
 
 
 # Path set necessary in each instance of WSL.
