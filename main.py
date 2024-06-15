@@ -1,9 +1,9 @@
 import cifar_dnn
 
-from cifar_dnn import run_cifar_training
+from cifar_dnn import run_training
 
 def main():
-    run_cifar_training()
+    run_training()
     print("Hello, World!")
     return
 
