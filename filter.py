@@ -1,4 +1,8 @@
 class Filter:
+    """
+    A simple object for preserving the position and bit pattern of a Square,
+    Circular, or Triangular watermark.
+    """
     def __init__(self, pos: tuple[int, int], bit: int):
         self._pos = pos
         self._bit = bit

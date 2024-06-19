@@ -2,15 +2,27 @@ import rsa
 import time
 from filter import Filter
 
+# ID string can be modified as pleased.
 ID = "foobar"
 LAMBDA = 2000
 THRESH = 0.8
+
+# Initialize global variables.
 pub_k = None
 pri_k = None
 sig = None
 verifier_string = ""
 
 def generate_ownership_watermark(h: int, w: int, class_count: int, square_edge: int) -> tuple[Filter, int]:
+    """
+    Generates the ownership watermark as per the method described in Li et al.
+
+    Keyword Arguments:
+    h -- Height of input matrix to the model being embedded
+    w -- Width of input matrix to the model being embedded
+    class_count -- Number of class labels in the dataset
+    square_edge -- Length of the square edge used for square null embedding 
+    """
     (public_key, private_key) = rsa.newkeys(512)
     global pub_k
     global pri_k
@@ -26,25 +38,40 @@ def generate_ownership_watermark(h: int, w: int, class_count: int, square_edge: 
     return (p, yW)
 
 def transform(sig: bytes, h: int, w: int, class_count: int, square_edge: int) -> tuple[Filter, int]:
+    """
+    Generates a tuple of Filter and Integer as per the method described in Li et al.
+
+    Keyword Arguments:
+    sig -- Signature of model owner
+    h -- Height of input matrix to the model being embedded
+    w -- Width of input matrix to the model being embedded
+    class_count -- Number of class labels in the dataset
+    square_edge -- Length of the square edge used for square null embedding 
+    """
     hashed_sig = hash(sig)
     true_label = hashed_sig % class_count
-    print("True Label: " + str(true_label))
     filter_bits = hashed_sig % (2 ** (square_edge ** 2))
-    print("Filter Bit: " + str(bin(filter_bits)))
     filter_pos = (hashed_sig % (h - square_edge), hashed_sig % (w - square_edge))
-    print("Filter Position: " + str(filter_pos))
     fil = Filter(filter_pos, filter_bits)
     return (fil, true_label)
 
 def verify_watermark(h: int, w: int, class_count: int, square_edge: int, chi_null) -> bool:
+    """
+    Verifies the existence of a watermark in the model as per the method described in Li et al.
+
+    Keyword Arguments:
+    h -- Height of input matrix to the model being embedded
+    w -- Width of input matrix to the model being embedded
+    class_count -- Number of class labels in the dataset
+    square_edge -- Length of the square edge used for square null embedding 
+    chi_null -- The accuracy of the model on a subset of null embedded data (obtained using model.evaluate)
+    """
+    # Modifications for True Embedding were removed and need to be added if required.
     if pub_k and sig:
         used_hash = rsa.verify(verifier_string.encode(), sig, pub_k)
         if used_hash == 'SHA-256':
             return False
-        else:
-            (fil, true_label) = transform(sig, h, w, class_count, square_edge)
-            # chi_true = 0
-            if chi_null > THRESH:
-                return True
+        elif chi_null > THRESH:
+            return True
     return False
 
