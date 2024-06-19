@@ -78,8 +78,8 @@ def run_training(embed: bool, type: str, epoch: int, dataset: str):
         (test_subset, test_subset_labels) = generate_null_data(type, dataset)
         loss, acc = model.evaluate(test_subset, test_subset_labels, verbose=0)
 
-        print("Here is loss: ", loss)
-        print("Here is accuracy; ", acc)
+        print("Here is Watermark Validation loss: ", loss)
+        print("Here is Watermark Validation accuracy; ", acc)
     else:
         model = train_model(train_x, class_count, dataset)
 
@@ -92,8 +92,8 @@ def run_training(embed: bool, type: str, epoch: int, dataset: str):
         (subset, subset_labels) = generate_null_data(type, dataset)
         loss, acc = model.evaluate(subset, subset_labels, verbose=0)
 
-        print("Here is loss: ", loss)
-        print("Here is accuracy; ", acc)
+        print("Here is Watermark Validation loss: ", loss)
+        print("Here is Watermark Validation accuracy; ", acc)
 
 def train_model(x_train: ndarray, class_count: int, dataset: str):
     """
